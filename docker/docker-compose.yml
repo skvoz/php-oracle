@@ -1,13 +1,15 @@
 version: '3.3'
 services:
-  web:
-    container_name: php-oracle
-    build: .
+  php-oracle-web:
+    build:
+      context: .
+      dockerfile: DockerfileTest
     ports:
       - "8081:81"
       - "4433:444"
     volumes:
-      - ../public/www_http:/var/www_http/html
-      - ../public/www_https:/var/www_https/html
+      - ../public/www_http:/var/www_http/html/
+      - ../public/www_https:/var/www_https/html/
 #      - ./conf/apache/vhosts:/usr/local/apache2/conf/extra
 #      - ./conf/php:/usr/local/etc/php/
+    tty: true

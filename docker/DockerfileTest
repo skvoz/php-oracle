@@ -1,0 +1,71 @@
+#FROM buildpack-deps:jessie
+FROM ubuntu:18.04
+
+ENV PHP_VERSION=5.3.29
+#MAINTAINER Amin Mkh <mukh_amin@yahoo.com>
+#
+## installing required stuff
+RUN apt-get update \
+    && apt-get install -y --force-yes curl vim lbzip2 git  autoconf2.13 wget build-essential libxml2-dev \
+    libapr1-dev libaprutil1-dev
+
+COPY conf/apache/httpd-2.4.41.tar.gz /opt/httpd-2.4.41.tar.gz
+
+
+##</apache2>##
+ENV OPEN_SSL_NAME="openssl-1.1.1d"
+
+#copy openssl to container
+COPY dist/$OPEN_SSL_NAME.tar.gz /opt/$OPEN_SSL_NAME.tar.gz
+
+
+#install new openssl
+RUN CFLAGS="-fPIC" && OPENSSL_VERSION=$OPEN_SSL_NAME \
+      && cd /opt \
+      && tar -xzf $OPEN_SSL_NAME.tar.gz \
+      && cd /opt/$OPEN_SSL_NAME \
+      && ./config shared && make && make install \
+      && rm -rf /opt/$OPEN_SSL_NAME
+#sertificates
+COPY conf/keys/server.crt /usr/local/apache/conf/server.crt
+COPY conf/keys/server.key /usr/local/apache/conf/server.key
+
+#apache
+RUN cd /opt \
+      && tar -xzf httpd-2.4.41.tar.gz \
+      && cd /opt/httpd-2.4.41 \
+      && ./configure --prefix=/usr/local/apache  \
+        --enable-so \
+        --enable-shared=max \
+      && make && make install \
+      && rm -rf /opt/httpd-2.4.41.tar.gz
+
+#php
+RUN cd /opt \
+    && curl --insecure -SL "http://php.net/get/php-$PHP_VERSION.tar.bz2/from/this/mirror" -o php.tar.bz2 \
+	&& mkdir -p /usr/src/php \
+	&& tar -xf php.tar.bz2 -C /usr/src/php --strip-components=1 \
+	&& rm php.tar.bz2* \
+	&& cd /usr/src/php \
+	&& ./configure \
+	#add libphp to apache
+	    --with-apxs2=/usr/local/apache/bin/apxs \
+#	    --with-openssl=/usr/local/ssl \
+	&& make \
+	&& make install \
+	&& rm -rf /opt/php-$PHP_VERSION.tar.bz2
+
+#server configuration
+COPY conf/apache/httpd-new.conf /usr/local/apache/conf/httpd.conf
+
+#vhost configuration
+COPY conf/apache/vhosts/default.conf /usr/local/apache/conf/extra/httpd-vhosts.conf
+COPY conf/apache/vhosts/default-ssl.conf /usr/local/apache/conf/extra/httpd-ssl.conf
+
+RUN export LD_LIBRARY_PATH="/usr/local/lib"
+
+#RUN /usr/local/apache/bin/apachectl start
+#CMD ["/usr/local/apache/bin/apachectl", "restart"]
+
+
+#CMD ["true"]

@@ -1,22 +1,24 @@
 #FROM buildpack-deps:jessie
-FROM httpd:2.4
+FROM ubuntu:18.04
 
 #MAINTAINER Amin Mkh <mukh_amin@yahoo.com>
 #
 ## installing required stuff
 RUN apt-get update \
     && apt-get install -y --force-yes curl vim lbzip2 git  autoconf2.13 wget build-essential libxml2-dev \
-    libapache2-mod-php5
+    libapr1-dev libaprutil1-dev
 
-#COPY conf/apache/httpd-2.4.41.tar.gz /opt/httpd-2.4.41.tar.gz
+COPY conf/apache/httpd-2.4.41.tar.gz /opt/httpd-2.4.41.tar.gz
 #
 #
-#RUN cd /opt \
-#      && tar -xzf httpd-2.4.41.tar.gz \
-#      && cd /opt/httpd-2.4.41 \
-#      && ./configure --prefix=/usr/local/apache --enable-shared=max\
-#      && make && make install \
-#      && rm -rf /opt/httpd-2.4.41.tar.gz
+RUN cd /opt \
+      && tar -xzf httpd-2.4.41.tar.gz \
+      && cd /opt/httpd-2.4.41 \
+      && ./configure --prefix=/usr/local/apache  \
+        --enable-so \
+        --enable-shared=max \
+      && make && make install \
+      && rm -rf /opt/httpd-2.4.41.tar.gz
 
 #help modules
 COPY conf/php/docker-php-* /usr/local/bin/
@@ -28,11 +30,11 @@ COPY conf/keys/server.crt /usr/local/apache2/conf/server.crt
 COPY conf/keys/server.key /usr/local/apache2/conf/server.key
 
 #server configuration
-COPY conf/apache/httpd.conf /usr/local/apache2/conf/httpd.conf
+#COPY conf/apache/httpd.conf /usr/local/apache2/conf/httpd.conf
 
 #vhost configuration
-COPY conf/apache/vhosts/default.conf /usr/local/apache2/conf/extra/httpd-vhosts.conf
-COPY conf/apache/vhosts/default-ssl.conf /usr/local/apache2/conf/extra/httpd-ssl.conf
+#COPY conf/apache/vhosts/default.conf /usr/local/apache2/conf/extra/httpd-vhosts.conf
+#COPY conf/apache/vhosts/default-ssl.conf /usr/local/apache2/conf/extra/httpd-ssl.conf
 
 
 ## PHP extensions
@@ -77,6 +79,8 @@ ENV PHP_VERSION 5.3.29
 
 ENV PHP_INI_DIR /usr/local/lib
 
+#COPY conf/php/php.ini $PHP_INI_DIR/php.ini
+
 RUN mkdir -p $PHP_INI_DIR/conf.d
 
 # php 5.3 needs older autoconf
@@ -113,7 +117,6 @@ RUN set -x \
   && make clean
 
 
-COPY conf/php/php.ini /usr/local/etc/php/php.ini
 
 #RUN service apachectl restart
 
@@ -144,39 +147,7 @@ COPY conf/php/php.ini /usr/local/etc/php/php.ini
 #ENV PHP_INI_DIR /usr/local/lib
 #RUN mkdir -p $PHP_INI_DIR/conf.d
 #
-## php 5.3 needs older autoconf
-#RUN set -x \
-#	&& apt-get update && apt-get install -y --force-yes autoconf2.13 && rm -r /var/lib/apt/lists/* \
-#	&& curl --insecure -SLO http://launchpadlibrarian.net/140087283/libbison-dev_2.7.1.dfsg-1_amd64.deb \
-#	&& curl --insecure -SLO http://launchpadlibrarian.net/140087282/bison_2.7.1.dfsg-1_amd64.deb \
-#	&& dpkg -i libbison-dev_2.7.1.dfsg-1_amd64.deb \
-#	&& dpkg -i bison_2.7.1.dfsg-1_amd64.deb \
-#	&& rm *.deb \
-#	&& curl --insecure -SL "http://php.net/get/php-$PHP_VERSION.tar.bz2/from/this/mirror" -o php.tar.bz2 \
-#	&& curl --insecure -SL "http://php.net/get/php-$PHP_VERSION.tar.bz2.asc/from/this/mirror" -o php.tar.bz2.asc \
-##	&& gpg --verify php.tar.bz2.asc \
-#	&& mkdir -p /usr/src/php \
-#	&& tar -xf php.tar.bz2 -C /usr/src/php --strip-components=1 \
-#	&& rm php.tar.bz2* \
-#	&& cd /usr/src/php \
-#	&& ./buildconf --force \
-#	&& ./configure --disable-cgi \
-#		$(command -v apxs2 > /dev/null 2>&1 && echo '--with-apxs2' || true) \
-#    --with-config-file-path="$PHP_INI_DIR" \
-#    --with-config-file-scan-dir="$PHP_INI_DIR/conf.d" \
-#		--with-mysql \
-#		--with-mysqli \
-#		--with-pdo-mysql \
-#		--with-mbstring \
-#		--with-soap \
-##		--with-openssl-dir=/usr/local/ssl \
-#		--with-openssl=/usr/local/ssl \
-#		--with-openssl-dir=/usr/local/ssl \
-#	&& make -j"$(nproc)" \
-#	&& make install \
-#	&& dpkg -r bison libbison-dev \
-#	&& apt-get purge -y --force-yes --auto-remove autoconf2.13 \
-#  && make clean
+
 #
 ##fix bug openssl
 #RUN echo -e '/usr/local/lib\n' >> /etc/ld.so.conf && ldconfig
@@ -195,3 +166,4 @@ COPY conf/php/php.ini /usr/local/etc/php/php.ini
 #RUN a2enmod ssl
 #RUN a2enmod headers
 #RUN service apache2 restart
+RUN /usr/local/apache/bin/apachectl -k start
