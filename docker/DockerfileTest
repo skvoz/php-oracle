@@ -1,13 +1,16 @@
 #FROM buildpack-deps:jessie
+#netstat -anp | grep apache
 FROM ubuntu:18.04
 
+ENV PHP_AUTOCONF=/usr/bin/autoconf2.13
+ENV PHP_AUTOHEADER=/usr/bin/autoheader2.13
 ENV PHP_VERSION=5.3.29
 #MAINTAINER Amin Mkh <mukh_amin@yahoo.com>
 #
 ## installing required stuff
 RUN apt-get update \
-    && apt-get install -y --force-yes curl vim lbzip2 git  autoconf2.13 wget build-essential libxml2-dev \
-    libapr1-dev libaprutil1-dev zip
+    && apt-get install -y --force-yes libaio-dev curl vim lbzip2 git  autoconf2.13 wget build-essential libxml2-dev \
+    libapr1-dev libaprutil1-dev zip libmcrypt-dev net-tools
 
 COPY conf/apache/httpd-2.4.41.tar.gz /opt/httpd-2.4.41.tar.gz
 
@@ -40,7 +43,39 @@ RUN cd /opt \
       && make && make install \
       && rm -rf /opt/httpd-2.4.41.tar.gz
 
+RUN export LD_LIBRARY_PATH="/usr/local/lib"
+
+#oracle
+RUN mkdir /opt/oracle \
+    && cd /opt/oracle
+##
+ADD dist/oracle/11.2/instantclient-basic-linux.x64-11.2.0.4.0.zip /opt/oracle
+ADD dist/oracle/11.2/instantclient-sdk-linux.x64-11.2.0.4.0.zip /opt/oracle
+ADD dist/oracle/11.2/instantclient-sqlplus-linux.x64-11.2.0.4.0.zip /opt/oracle
+
+
+# Install Oracle Instantclient
+RUN  unzip /opt/oracle/instantclient-basic-linux.x64-11.2.0.4.0.zip -d /opt/oracle \
+    && unzip /opt/oracle/instantclient-sqlplus-linux.x64-11.2.0.4.0.zip -d /opt/oracle \
+    && unzip /opt/oracle/instantclient-sdk-linux.x64-11.2.0.4.0.zip -d /opt/oracle
+
+RUN \
+    ln -s /opt/oracle/instantclient_11_2/libclntsh.so.11.1 /opt/oracle/instantclient_11_2/libclntsh.so \
+    && ln -s /opt/oracle/instantclient_11_2/libocijdbc.so.11.1 /opt/oracle/instantclient_11_2/libocijdbc.so \
+    && ln -s /opt/oracle/instantclient_11_2/libocci.so.11.1 /opt/oracle/instantclient_11_2/libocci.so \
+    && rm -rf /opt/oracle/*.zip
+
+
+
 #php
+
+ENV PHP_INI_DIR /usr/local/lib
+RUN mkdir -p $PHP_INI_DIR/conf.d
+#
+COPY conf/php/docker-php-ext-* /usr/local/bin/
+
+#ENV ORACLE_HOME=/opt/oracle/instantclient_11_2
+
 RUN cd /opt \
     && curl --insecure -SL "http://php.net/get/php-$PHP_VERSION.tar.bz2/from/this/mirror" -o php.tar.bz2 \
 	&& mkdir -p /usr/src/php \
@@ -49,14 +84,24 @@ RUN cd /opt \
 	&& cd /usr/src/php \
 	&& ./configure \
 	#add libphp to apache
-	    --with-apxs2=/usr/local/apache/bin/apxs \
+	     --with-apxs2=/usr/local/apache/bin/apxs \
+	     --with-config-file-path="$PHP_INI_DIR" \
+         --with-config-file-scan-dir="$PHP_INI_DIR/conf.d" \
 	     --with-pdo-mysql=mysqlnd \
+#	     --with-pdo-oci=shared,instantclient,/opt/oracle/instantclient_11_2,11.2 \
+	     --with-oci8=shared,instantclient,/opt/oracle/instantclient_11_2,11.2 \
 	     --with-mysqli=mysqlnd \
+	     --with-mbstring \
+	     --with-mcrypt \
+	     --enable-cli \
 #	    --with-openssl=/usr/local/ssl \
 	&& make \
 	&& make install \
 	&& rm -rf /opt/php-$PHP_VERSION.tar.bz2
 
+RUN cd /opt/oracle/instantclient_11_2 && ls -la
+
+RUN cp /usr/src/php/php.ini-development $PHP_INI_DIR/php.ini
 #server configuration
 COPY conf/apache/httpd-new.conf /usr/local/apache/conf/httpd.conf
 
@@ -64,45 +109,57 @@ COPY conf/apache/httpd-new.conf /usr/local/apache/conf/httpd.conf
 COPY conf/apache/vhosts/default.conf /usr/local/apache/conf/extra/httpd-vhosts.conf
 COPY conf/apache/vhosts/default-ssl.conf /usr/local/apache/conf/extra/httpd-ssl.conf
 
-RUN export LD_LIBRARY_PATH="/usr/local/lib"
+#RUN chmod -R u+x /usr/local/bin
+#RUN PATH=$PATH:~/usr/local/bin
 
-#oracle
-RUN mkdir /opt/oracle \
-    && cd /opt/oracle
+#oci
+#COPY dist/oci8-2.0.12.tgz /opt/oci8-2.0.12.tgz
+#ENV ORACLE_HOME=/opt/oracle/client/11.2.0
+##ENV LD_LIBRARY_PATH  /opt/oracle/instantclient_11_2:${LD_LIBRARY_PATH}
+#
+#RUN pecl install oci8-2.0.12
+#
+##ENV ORACLE_HOME=/u01/app/oracle/product/11.2.0
+#RUN cd /opt \
+#      && tar -xzf oci8-2.0.12.tgz \
+#      && ls -la \
+#      && cd oci8-2.0.12 \
+#      && whereis autoconf \
+#      &&  whereis autoheader \
+#      && phpize \
+#      &&  ./configure --with-oci8=instantclient,/opt/oracle/instantclient_11_2,11.2,$ORACLE_HOME \
+#      && make && make install \
+#      && rm -rf /opt/oci8-2.0.12.tgz
 
-ADD dist/oracle/instantclient-basic-linux.x64-11.2.0.4.0.zip /opt/oracle
-ADD dist/oracle/instantclient-sdk-linux.x64-11.2.0.4.0.zip /opt/oracle
-ADD dist/oracle/instantclient-sqlplus-linux.x64-11.2.0.4.0.zip /opt/oracle
+#RUN cd /opt/oracle/instantclient_11_2 \
+#    && ./configure \
+#    --with-pdo-oci=instantclient,/opt/oracle/instantclient_11_2,11.2 \
+#    --with-oci8=shared, $ORACLE_HOME \
+#    && make \
+#    && make install
 
-# Install Oracle Instantclient
-RUN  unzip /opt/oracle/instantclient-basic-linux.x64-11.2.0.4.0.zip -d /opt/oracle \
-    && unzip /opt/oracle/instantclient-sqlplus-linux.x64-11.2.0.4.0.zip -d /opt/oracle \
-    && unzip /opt/oracle/instantclient-sdk-linux.x64-11.2.0.4.0.zip -d /opt/oracle
-
-RUN cd /opt/oracle/instantclient_11_2 && ls -la
-RUN \
-    ln -s /opt/oracle/instantclient_11_2/libclntsh.so.11.1 /opt/oracle/instantclient_11_2/libclntsh.so \
-    && ln -s /opt/oracle/instantclient_11_2/libocijdbc.so.11.1 /opt/oracle/instantclient_11_2/libocijdbc.so \
-    && ln -s /opt/oracle/instantclient_11_2/libocci.so.11.1 /opt/oracle/instantclient_11_2/libocci.so \
-    && rm -rf /opt/oracle/*.zip
-
-ENV LD_LIBRARY_PATH  /opt/oracle/instantclient_11_2:${LD_LIBRARY_PATH}
-
-#RUN pecl config-set php_ini /etc/php5/apache2/php.ini
-RUN mkdir /usr/local/etc/php/
-RUN mkdir /usr/local/etc/php/conf.d
-RUN touch /usr/local/etc/php/conf.d/docker-php-ext-oci8.ini
-
-RUN echo 'instantclient,/opt/oracle/instantclient_11_2' | pecl install oci8-2.0.12 \
-      && docker-php-ext-enable \
-               oci8 \
-       && docker-php-ext-configure pdo_oci --with-pdo-oci=instantclient,/opt/oracle/instantclient_11_2,11.2 \
-       && docker-php-ext-install \
-               pdo_oci
+#ENV LD_LIBRARY_PATH  /opt/oracle/instantclient_11_2:${LD_LIBRARY_PATH}
+#
+#RUN pecl config-set php_ini /usr/local/lib/php.ini
+#
+RUN echo "extension=oci8.so" >> /usr/local/lib/php.ini
+#
+#RUN mkdir /usr/local/etc/php/
+#RUN mkdir /usr/local/etc/php/conf.d
+#RUN touch /usr/local/etc/php/conf.d/docker-php-ext-oci8.ini
+#
+#RUN pecl install oci8-2.0.12
+#RUN php -m
+#RUN cd /usr/local/bin && echo 'instantclient,/opt/oracle/instantclient_11_2' | pecl install oci8-2.0.12 \
+#      && docker-php-ext-enable \
+#               oci8 \
+#       && docker-php-ext-configure pdo_oci --with-pdo-oci=instantclient,/opt/oracle/instantclient_11_2,11.2 \
+#       && docker-php-ext-install \
+#               pdo_oci
 #
 
-#RUN /usr/local/apache/bin/apachectl start
-#CMD ["/usr/local/apache/bin/apachectl", "restart"]
+COPY conf/apache/httpd-foreground /usr/local/bin/
+
+CMD ["httpd-foreground"]
 
 
-#CMD ["true"]

@@ -1,4 +1,4 @@
-version: '3.3'
+version: '3.2'
 services:
   php-oracle-web:
     build:
@@ -8,8 +8,7 @@ services:
       - "8081:81"
       - "4433:444"
     volumes:
-      - ../public/www_http:/var/www_http/html/
-      - ../public/www_https:/var/www_https/html/
+      - /d/projects/php-oracle/public/www_http:/var/www_http/html/
+      - /d/projects/php-oracle/public/www_https:/var/www_https/html/
 #      - ./conf/apache/vhosts:/usr/local/apache2/conf/extra
 #      - ./conf/php:/usr/local/etc/php/
-    tty: true
