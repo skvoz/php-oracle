@@ -158,8 +158,13 @@ RUN echo "extension=oci8.so" >> /usr/local/lib/php.ini
 #               pdo_oci
 #
 
-COPY conf/apache/httpd-foreground /usr/local/bin/
+COPY conf/apache/httpd-foreground /usr/local/bin/httpd-foreground
 
-CMD ["httpd-foreground"]
+
+RUN cd /usr/local/bin && ls -la
+
+CMD ["/usr/local/apache/bin/apachectl", "-DFOREGROUND"]
+
+#CMD ["httpd-foreground"]
 
 
