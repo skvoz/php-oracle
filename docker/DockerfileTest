@@ -17,8 +17,7 @@ RUN echo "/usr/local/openssl/lib" >> /etc/ld.so.conf.d/local.conf
 RUN apt-get update \
     && apt-get install -y --force-yes libaio-dev curl vim lbzip2 git  autoconf2.13 wget build-essential libxml2-dev \
     libapr1-dev libaprutil1-dev zip libmcrypt-dev net-tools \
-    libcurl4-openssl-dev \
-    libapr1 libapr1-dev
+    libcurl4-openssl-dev libpcre3 libpcre3-dev zlib1g-dev
 
 COPY docker/conf/apache/httpd-2.4.41.tar.gz /opt/httpd-2.4.41.tar.gz
 
@@ -28,24 +27,37 @@ COPY docker/conf/keys/server.crt /usr/local/apache/conf/server.crt
 COPY docker/conf/keys/server.key /usr/local/apache/conf/server.key
 
 
+#
+###apr for apache
+#ENV APR="apr-1.7.0"
+#ENV APR_UTILS="apr-util-1.6.1"
+#
+#COPY docker/dist/$APR.tar.gz ./srclib/$APR.tar.gz
+#COPY docker/dist/$APR_UTILS.tar.gz ./srclib/$APR_UTILS.tar.gz
+#
+##install new openssl
+##RUN CFLAGS="-fPIC" && OPENSSL_VERSION=$OPEN_SSL_NAME \
+##./srclib/apr and ./srclib/apr-util
+##
+#RUN mkdir -p ./srclib
+#RUN chmod -R 775 ./srclib
+##RUN mkdir ./srclib/apr-util
+##
+#
+#RUN cd ./srclib && ls -la
+#
+#RUN cd ./srclib \
+#      && tar -xzf $APR.tar.gz && mv $APR/. apr
+#
+#RUN cd ./srclib \
+#      && tar -xzf $APR_UTILS.tar.gz && mv $APR_UTILS/. apr_util
+#
+#RUN cd ./srclib && ls -la
 
-#apr for apache
-ENV APR="apr-1.7.0"
-COPY docker/dist/$APR.tar.gz /opt/$APR.tar.gz
-
-#install new openssl
-#RUN CFLAGS="-fPIC" && OPENSSL_VERSION=$OPEN_SSL_NAME \
-#./srclib/apr and ./srclib/apr-util
-
-RUN mkdir ./srclib
-RUN mkdir ./srclib/apr
-RUN mkdir ./srclib/apr-util
-
-RUN cd /opt \
-      && tar -xzf $APR.tar.gz -C ./srclib/apr/ \
-      && cd ./srclib/apr/ && ls -la \
-      && cp -Rf ./srclib/apr/ ./srclib/apr-util/ \
-      && rm -rf /opt/$APR.tar.gz
+#RUN cd ./srclib/apr-util \
+#      && tar -xzf $APR.tar.gz
+#      && cp -r $APR/. ./srclib/apr-util/ \
+#      && rm -rf /opt/$APR.tar.gz
 
 
 #apache
@@ -53,7 +65,8 @@ ENV LDFLAGS=-L/usr/local/ssl/lib
 RUN cd /opt \
       && tar -xzf httpd-2.4.41.tar.gz \
       && cd /opt/httpd-2.4.41 \
-      && ./configure --with-included-apr \
+      && ./configure \
+#        --with-included-apr \
         --prefix=/usr/local/apache  \
         --enable-so \
         --enable-rewrite \
