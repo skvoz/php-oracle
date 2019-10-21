@@ -1,47 +1,86 @@
 #FROM buildpack-deps:jessie
 #netstat -anp | grep apache
-FROM ubuntu:18.04
+FROM ubuntu:16.04
 
 ENV PHP_AUTOCONF=/usr/bin/autoconf2.13
 ENV PHP_AUTOHEADER=/usr/bin/autoheader2.13
 ENV PHP_VERSION=5.3.29
+
+#ENV OPEN_SSL_NAME="openssl-1.1.1d"
+ENV OPEN_SSL_NAME="openssl-1.0.1f"
+
+RUN echo "/usr/local/openssl/lib" >> /etc/ld.so.conf.d/local.conf
+
 #MAINTAINER Amin Mkh <mukh_amin@yahoo.com>
 #
 ## installing required stuff
 RUN apt-get update \
     && apt-get install -y --force-yes libaio-dev curl vim lbzip2 git  autoconf2.13 wget build-essential libxml2-dev \
-    libapr1-dev libaprutil1-dev zip libmcrypt-dev net-tools
+    libapr1-dev libaprutil1-dev zip libmcrypt-dev net-tools \
+    libcurl4-openssl-dev \
+    libapr1 libapr1-dev
 
-COPY conf/apache/httpd-2.4.41.tar.gz /opt/httpd-2.4.41.tar.gz
+COPY docker/conf/apache/httpd-2.4.41.tar.gz /opt/httpd-2.4.41.tar.gz
 
 
-##</apache2>##
-ENV OPEN_SSL_NAME="openssl-1.1.1d"
+#sertificates
+COPY docker/conf/keys/server.crt /usr/local/apache/conf/server.crt
+COPY docker/conf/keys/server.key /usr/local/apache/conf/server.key
 
-#copy openssl to container
-COPY dist/$OPEN_SSL_NAME.tar.gz /opt/$OPEN_SSL_NAME.tar.gz
 
+
+#apr for apache
+ENV APR="apr-1.7.0"
+COPY docker/dist/$APR.tar.gz /opt/$APR.tar.gz
 
 #install new openssl
-RUN CFLAGS="-fPIC" && OPENSSL_VERSION=$OPEN_SSL_NAME \
-      && cd /opt \
-      && tar -xzf $OPEN_SSL_NAME.tar.gz \
-      && cd /opt/$OPEN_SSL_NAME \
-      && ./config shared && make && make install \
-      && rm -rf /opt/$OPEN_SSL_NAME
-#sertificates
-COPY conf/keys/server.crt /usr/local/apache/conf/server.crt
-COPY conf/keys/server.key /usr/local/apache/conf/server.key
+#RUN CFLAGS="-fPIC" && OPENSSL_VERSION=$OPEN_SSL_NAME \
+#./srclib/apr and ./srclib/apr-util
+
+RUN mkdir ./srclib
+RUN mkdir ./srclib/apr
+RUN mkdir ./srclib/apr-util
+
+RUN cd /opt \
+      && tar -xzf $APR.tar.gz -C ./srclib/apr/ \
+      && cd ./srclib/apr/ && ls -la \
+      && cp -Rf ./srclib/apr/ ./srclib/apr-util/ \
+      && rm -rf /opt/$APR.tar.gz
+
 
 #apache
+ENV LDFLAGS=-L/usr/local/ssl/lib
 RUN cd /opt \
       && tar -xzf httpd-2.4.41.tar.gz \
       && cd /opt/httpd-2.4.41 \
-      && ./configure --prefix=/usr/local/apache  \
+      && ./configure --with-included-apr \
+        --prefix=/usr/local/apache  \
         --enable-so \
-        --enable-shared=max \
+        --enable-rewrite \
+        --with-ssl=/usr/local/ssl \
+        --enable-ssl=shared  \
+        --enable-deflate \
+        --enable-expires \
+        --enable-headers \
+#        --enable-shared=max \
+#        --with-pcre=/usr/local/pcre
       && make && make install \
-      && rm -rf /opt/httpd-2.4.41.tar.gz
+      && rm -rf /opt/httpd-2.4.41.tar.gz \
+      && make clean
+
+
+#copy openssl to container
+COPY docker/dist/$OPEN_SSL_NAME.tar.gz /opt/$OPEN_SSL_NAME.tar.gz
+
+#install new openssl
+#RUN CFLAGS="-fPIC" && OPENSSL_VERSION=$OPEN_SSL_NAME \
+RUN OPENSSL_VERSION=$OPEN_SSL_NAME \
+      && cd /opt \
+      && tar -xzf $OPEN_SSL_NAME.tar.gz \
+      && cd /opt/$OPEN_SSL_NAME \
+      && ./config --prefix=/usr --openssldir=/usr/local/openssl shared && make && make install_sw \
+      && rm -rf /opt/$OPEN_SSL_NAME.tar.gz
+
 
 RUN export LD_LIBRARY_PATH="/usr/local/lib"
 
@@ -49,9 +88,9 @@ RUN export LD_LIBRARY_PATH="/usr/local/lib"
 RUN mkdir /opt/oracle \
     && cd /opt/oracle
 ##
-ADD dist/oracle/11.2/instantclient-basic-linux.x64-11.2.0.4.0.zip /opt/oracle
-ADD dist/oracle/11.2/instantclient-sdk-linux.x64-11.2.0.4.0.zip /opt/oracle
-ADD dist/oracle/11.2/instantclient-sqlplus-linux.x64-11.2.0.4.0.zip /opt/oracle
+ADD docker/dist/oracle/11.2/instantclient-basic-linux.x64-11.2.0.4.0.zip /opt/oracle
+ADD docker/dist/oracle/11.2/instantclient-sdk-linux.x64-11.2.0.4.0.zip /opt/oracle
+ADD docker/dist/oracle/11.2/instantclient-sqlplus-linux.x64-11.2.0.4.0.zip /opt/oracle
 
 
 # Install Oracle Instantclient
@@ -72,7 +111,7 @@ RUN \
 ENV PHP_INI_DIR /usr/local/lib
 RUN mkdir -p $PHP_INI_DIR/conf.d
 #
-COPY conf/php/docker-php-ext-* /usr/local/bin/
+COPY docker/conf/php/docker-php-ext-* /usr/local/bin/
 
 #ENV ORACLE_HOME=/opt/oracle/instantclient_11_2
 
@@ -93,8 +132,12 @@ RUN cd /opt \
 	     --with-mysqli=mysqlnd \
 	     --with-mbstring \
 	     --with-mcrypt \
+	     --enable-so \
+         --enable-shared=max \
 	     --enable-cli \
-#	    --with-openssl=/usr/local/ssl \
+	     --enable-ssl \
+	     --with-openssl=shared \
+	     --with-openssl-dir=/usr/local/ssl \
 	&& make \
 	&& make install \
 	&& rm -rf /opt/php-$PHP_VERSION.tar.bz2
@@ -103,11 +146,11 @@ RUN cd /opt/oracle/instantclient_11_2 && ls -la
 
 RUN cp /usr/src/php/php.ini-development $PHP_INI_DIR/php.ini
 #server configuration
-COPY conf/apache/httpd-new.conf /usr/local/apache/conf/httpd.conf
+COPY docker/conf/apache/httpd-new.conf /usr/local/apache/conf/httpd.conf
 
 #vhost configuration
-COPY conf/apache/vhosts/default.conf /usr/local/apache/conf/extra/httpd-vhosts.conf
-COPY conf/apache/vhosts/default-ssl.conf /usr/local/apache/conf/extra/httpd-ssl.conf
+COPY docker/conf/apache/vhosts/default.conf /usr/local/apache/conf/extra/httpd-vhosts.conf
+COPY docker/conf/apache/vhosts/default-ssl.conf /usr/local/apache/conf/extra/httpd-ssl.conf
 
 #RUN chmod -R u+x /usr/local/bin
 #RUN PATH=$PATH:~/usr/local/bin
@@ -158,10 +201,7 @@ RUN echo "extension=oci8.so" >> /usr/local/lib/php.ini
 #               pdo_oci
 #
 
-COPY conf/apache/httpd-foreground /usr/local/bin/httpd-foreground
-
-
-RUN cd /usr/local/bin && ls -la
+COPY docker/conf/apache/httpd-foreground /usr/local/bin/httpd-foreground
 
 CMD ["/usr/local/apache/bin/apachectl", "-DFOREGROUND"]
 
