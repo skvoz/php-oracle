@@ -2,13 +2,13 @@ version: '3.2'
 services:
   php-oracle-web:
     build:
-      context: .
-      dockerfile: DockerfileTest
+      context: ../
+      dockerfile: docker/DockerfileTest
     ports:
       - "8081:81"
       - "4433:444"
     volumes:
-      - /d/projects/php-oracle/public/www_http/:/var/www_http/html/
-      - /d/projects/php-oracle/public/www_https/:/var/www_https/html/
+      -  ./../www/http/:/var/www/http/html/
+      - ./../www/https/:/var/www/https/html/
 #      - ./conf/apache/vhosts:/usr/local/apache2/conf/extra
 #      - ./conf/php:/usr/local/etc/php/
