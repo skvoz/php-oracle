@@ -8,7 +8,7 @@ RUN apt-get update \
     && apt-get install -y --force-yes curl vim lbzip2 git  autoconf2.13 wget build-essential libxml2-dev \
     libapr1-dev libaprutil1-dev
 
-COPY conf/apache/httpd-2.4.41.tar.gz /opt/httpd-2.4.41.tar.gz
+COPY dist/httpd-2.4.41.tar.gz /opt/httpd-2.4.41.tar.gz
 #
 #
 RUN cd /opt \
