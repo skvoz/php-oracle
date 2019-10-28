@@ -13,7 +13,8 @@ ENV PCRE="pcre-8.32"
 #
 ##lib part
 RUN apt-get update \
-    && apt-get install -y --force-yes  gcc build-essential
+    && apt-get install -y --force-yes  gcc build-essential curl autoconf2.13  libxml2-dev \
+    libaio-dev curl vim lbzip2 git wget zip libmcrypt-dev net-tools
 #    libaio-dev curl vim lbzip2 git  autoconf2.13 wget build-essential \
 #    zip libmcrypt-dev net-tools
 
@@ -49,17 +50,64 @@ RUN cd /opt/$HTTPD_NAME/srclib \
 
 RUN cd /opt/$HTTPD_NAME \
     ./buildconf --force && \
-    ./configure --prefix=/opt/httpd --enable-pie --enable-mods-shared=all --enable-so --disable-include \
+    ./configure --prefix=/usr/local/apache --enable-pie --enable-mods-shared=all --enable-so --disable-include \
         --enable-deflate --enable-headers --enable-expires --enable-ssl=shared --enable-mpms-shared=all \
         --with-mpm=worker --enable-rewrite --with-z=/usr/local/zlib --with-pcre=/usr/local/pcre --with-ssl=/usr/local/openssl \
         --enable-module=ssl --with-included-apr && make && make install
     
-
+#RUN cd /usr/local/apache && ls -la
+#RUN cd /usr/local/bin && ls -la
 
 #copy configuration
 
-#entypoint
+COPY docker/conf/keys/server.crt /usr/local/apache/conf/server.crt
+COPY docker/conf/keys/server.key /usr/local/apache/conf/server.key
 
+#RUN mv /usr/local/apache/conf/httpd.conf /usr/local/apache/conf/httpd.conf.old
+#COPY docker/conf/apache/httpd-new.conf /usr/local/apache/conf/httpd.conf
+
+#vhost configuration
+COPY docker/conf/apache/vhosts/default.conf /usr/local/apache/conf/extra/httpd-vhosts.conf
+COPY docker/conf/apache/vhosts/default-ssl.conf /usr/local/apache/conf/extra/httpd-ssl.conf
+
+
+
+
+RUN cd /opt \
+    && curl --insecure -SL "http://php.net/get/php-$PHP_VERSION.tar.bz2/from/this/mirror" -o php.tar.bz2 \
+	&& mkdir -p /usr/src/php \
+	&& tar -xf php.tar.bz2 -C /usr/src/php --strip-components=1 \
+	&& rm php.tar.bz2* \
+	&& cd /usr/src/php \
+    && ./buildconf --force \
+	&& ./configure \
+	#add libphp to apache
+	     --with-apxs2=/usr/local/apache/bin/apxs \
+	     --with-config-file-path="$PHP_INI_DIR" \
+         --with-config-file-scan-dir="$PHP_INI_DIR/conf.d" \
+	     --with-pdo-mysql=mysqlnd \
+#	     --with-pdo-oci=shared,instantclient,/opt/oracle/instantclient_11_2,11.2 \
+#	     --with-oci8=shared,instantclient,/opt/oracle/instantclient_11_2,11.2 \
+	     --with-mysqli=mysqlnd \
+	     --enable-cli \
+	     --enable-openssl \
+	    --with-openssl \
+	    --with-openssl-dir=/usr/local/openssl \
+	       && make -j"$(nproc)" \
+	&& make \
+	&& make install \
+	&& rm -rf /opt/php-$PHP_VERSION.tar.bz2
+
+#entypoint
+COPY docker/conf/apache/httpd-foreground /usr/local/bin/httpd-foreground
+
+
+RUN cd /usr/local/bin && ls -la
+RUN php -m
+RUN cd /usr/local/apache/modules && ls -la
+CMD ["/usr/local/apache/bin/apachectl", "-DFOREGROUND"]
+
+CMD ["httpd-foreground"]
 
 #
 #
